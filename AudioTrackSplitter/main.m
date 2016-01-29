@@ -13,76 +13,95 @@ int main(int argc, const char * argv[])
 {
     @autoreleasepool
     {
-        NSString *testFile = @"/Users/akaramian/Desktop/catinthehat.mov";
+        NSString *testFile = @"/Users/akaramian/Desktop/testfiles/catinthehat.mov";///Users/akaramian/Desktop/testfiles/HOUSE_OF_CARDS_101_es-ES_DiscreteMultipleTracks.mov";
         NSURL *testfileURL = [NSURL fileURLWithPath:testFile];
         
+        //setup source
+        AVURLAsset *sourceAsset = [[AVURLAsset alloc] initWithURL:testfileURL options:nil];
+        NSArray<AVAssetTrack *> *tracks = [sourceAsset tracksWithMediaType:AVMediaTypeAudio];
         
-        AVURLAsset *sourceFile = [[AVURLAsset alloc] initWithURL:testfileURL options:nil];
-        NSArray<AVAssetTrack *> *tracks = [sourceFile tracksWithMediaType:AVMediaTypeAudio];
+        //create new file name
+        NSURL *surroundExportfile = [NSURL fileURLWithPath:[testFile stringByAppendingString:@"surround.mov"]];
+
+        //setup reader
+        AVAssetReader *assetReader = [[AVAssetReader alloc] initWithAsset:sourceAsset error:nil];
+
+        //setup asset writer
+        AVAssetWriter *assetWriter = [[AVAssetWriter alloc] initWithURL:surroundExportfile fileType:AVFileTypeWAVE error:nil];
+        AudioChannelLayout surroundLayout = {
+            .mChannelLayoutTag = kAudioChannelLayoutTag_AudioUnit_5_1,
+            .mChannelBitmap = 0,
+            .mNumberChannelDescriptions = 0
+        };
+        
         
         if (tracks.count == 8)
         {
+//            setup output assets
             NSLog(@"5.1 + Stereo");
-//            AVAsset *surroundAsset = [[AVAsset alloc] init];
-  //          AVAsset *stereoAsset = [[AVAsset alloc] init];
 
-            AVMutableComposition *surroundComposition = [[AVMutableComposition alloc] init];
-            AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
             
             //create 5.1 comp and export
             for (int i = 0; i < 6; i++)
             {
                 AVAssetTrack *currentTrack = tracks[i];
-                AVMutableCompositionTrack *compTrack = [surroundComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                CMTimeRange timeRange = currentTrack.timeRange;
-                [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
                 
-                NSLog(@"test");
-            }
-            NSLog(@"5.1 composition created");
-            NSLog(@"tracks: %@", surroundComposition.tracks);
-        
-            //create new file name
-            NSURL *surroundExportfile = [NSURL fileURLWithPath:[testFile stringByAppendingString:@"surround.mov"]];
-            //create stereo comp and export
-            AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:surroundComposition presetName:AVAssetExportPresetPassthrough];
-            
-            dispatch_queue_t exportQ = dispatch_queue_create("exportQueue", DISPATCH_QUEUE_CONCURRENT);
-            
-            exportSession.outputFileType = AVFileTypeQuickTimeMovie;
-            exportSession.outputURL = surroundExportfile;
-            exportSession.shouldOptimizeForNetworkUse = false;
-            
-            CMTimeValue val = surroundComposition.duration.value;
-            CMTime duration = CMTimeMake(val, surroundComposition.duration.timescale);
-            exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
-            
-            dispatch_semaphore_t semaphores[1];
-            dispatch_semaphore_t surroundSemaphore = dispatch_semaphore_create(0);
-            semaphores[0] = surroundSemaphore;
-            
-            
-            [exportSession exportAsynchronouslyWithCompletionHandler:^{
-                switch ([exportSession status])
+                //create output for track
+                AVAssetReaderOutput *trackOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:currentTrack outputSettings:nil];
+                if ([assetReader canAddOutput:trackOutput])
                 {
-                    case AVAssetExportSessionStatusFailed:
-                    {
-                        NSLog(@"Failed");
-                        NSLog(@"%@", exportSession.error.localizedDescription);
-                        NSLog(@"%@", exportSession.error.localizedFailureReason);
-                        break;
-                    }
-                    case AVAssetExportSessionStatusCompleted:
-                    {
-                        NSLog(@"Completed");
-                        dispatch_semaphore_signal(surroundSemaphore);
-                    }
-                    default:
-                        break;
+                    [assetReader addOutput:trackOutput];
                 }
-            }];
-            
-            dispatch_semaphore_wait(surroundSemaphore, DISPATCH_TIME_FOREVER);
+
+                //create writer for track
+                NSDictionary *writerSettings = [NSDictionary dictionaryWithObjectsAndKeys:
+                                                [NSNumber numberWithInt:kAudioFormatLinearPCM], AVFormatIDKey,
+                                                [NSNumber numberWithFloat:48000], AVSampleRateKey,
+                                                [NSNumber numberWithInt:1], AVNumberOfChannelsKey,
+                                               nil];
+                
+                AVAssetWriterInput *writerInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio outputSettings:nil];
+                if ([assetWriter canAddInput:writerInput])
+                {
+                    [assetWriter addInput:writerInput];
+                    [assetReader startReading];
+                    [assetWriter startWriting];
+                    [assetWriter startSessionAtSourceTime:kCMTimeZero];
+                    
+                    dispatch_queue_t q = dispatch_queue_create("com.mvf.wavMaker", NULL);
+                    
+                    [writerInput requestMediaDataWhenReadyOnQueue:q usingBlock:^{
+                        while (assetReader.status == AVAssetReaderStatusReading)
+                        {
+                            //get sample buffer
+                            CMSampleBufferRef sampleBuffer = [trackOutput copyNextSampleBuffer];
+                            if (sampleBuffer)
+                            {
+                                //copy to new file
+                                [writerInput appendSampleBuffer:sampleBuffer];
+                                
+                                
+                                //release buffer and continue
+                                CFRelease(sampleBuffer);
+                                
+                            }
+                            else
+                            {
+                                [writerInput markAsFinished];
+                            }
+                        }
+                    }];
+
+                }
+                else
+                {
+                    NSLog(@"Cannot add writer input");
+                    NSLog(@"%@", assetWriter.error);
+                }
+                
+            }
+
+        
         }
         else if (tracks.count == 2)
         {
