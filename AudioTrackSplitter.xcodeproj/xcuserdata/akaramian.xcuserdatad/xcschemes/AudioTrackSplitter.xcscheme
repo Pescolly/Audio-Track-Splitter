@@ -61,6 +61,12 @@
             ReferencedContainer = "container:AudioTrackSplitter.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "/Users/akaramian/Desktop/testfiles/HOUSE_OF_CARDS_S1_101_it_DiscreteMultipleTracks.mov"
+            isEnabled = "YES">
+         </CommandLineArgument>
+      </CommandLineArguments>
       <AdditionalOptions>
       </AdditionalOptions>
    </LaunchAction>
