@@ -28,8 +28,8 @@ int main(int argc, const char * argv[])
         //get the filename and create a path at the destination
         NSString *incomingFilename = [[incomingURL lastPathComponent] stringByDeletingPathExtension];
         NSString *destinationFullPathFilename = [destination stringByAppendingPathComponent:incomingFilename];
- //       NSString *testFile
-   //     NSURL *testfileURL = [NSURL fileURLWithPath:testFile];
+        //       NSString *testFile
+        //     NSURL *testfileURL = [NSURL fileURLWithPath:testFile];
         
         //setup sourcefile and asset
         AVURLAsset *sourceFile = [[AVURLAsset alloc] initWithURL:incomingURL options:nil];
@@ -38,235 +38,139 @@ int main(int argc, const char * argv[])
         //setup export file URLs
         NSURL *surroundExportfile = [NSURL fileURLWithPath:[destinationFullPathFilename stringByAppendingString:@"_SURROUND.mov"]];
         NSURL *stereoExportfile = [NSURL fileURLWithPath:[destinationFullPathFilename stringByAppendingString:@"_STEREO.mov"]];
-
-        //check if export files exist
         
-        if ([[NSFileManager defaultManager] fileExistsAtPath:[surroundExportfile path]])
-        {
-            NSLog(@"File %@ already exists", [surroundExportfile path]);
-            exit(999);
-        }
-
-        if ([[NSFileManager defaultManager] fileExistsAtPath:[stereoExportfile path]])
-        {
-            NSLog(@"File %@ already exists", [stereoExportfile path]);
-            exit(999);
-        }
-
+        //create semaphore array
+        dispatch_semaphore_t semaphores[2];
         
-        if (tracks.count == 8)
-        {
-            AVMutableComposition *surroundComposition = [[AVMutableComposition alloc] init];
-            //create semaphore array
-            dispatch_semaphore_t semaphores[2];
+        NSUInteger trackCount = tracks.count;
         
-            //create 5.1 comp and export
-            for (int i = 0; i < 6; i++)
+        if (trackCount == 8 || trackCount == 7)
+        {
+            if (![[NSFileManager defaultManager] fileExistsAtPath:[surroundExportfile path]])
             {
-                AVAssetTrack *currentTrack = tracks[i];
-                AVMutableCompositionTrack *compTrack = [surroundComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                CMTimeRange timeRange = currentTrack.timeRange;
-                [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
+                
+                AVMutableComposition *surroundComposition = [[AVMutableComposition alloc] init];
+                
+                //create 5.1 comp and export
+                for (int i = 0; i < 6; i++)
+                {
+                    AVAssetTrack *currentTrack = tracks[i];
+                    AVMutableCompositionTrack *compTrack = [surroundComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+                    CMTimeRange timeRange = currentTrack.timeRange;
+                    [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
+                }
+                
+                //create stereo comp and export
+                AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:surroundComposition presetName:AVAssetExportPresetPassthrough];
+                
+                exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+                exportSession.outputURL = surroundExportfile;
+                exportSession.shouldOptimizeForNetworkUse = false;
+                
+                CMTimeValue val = surroundComposition.duration.value;
+                CMTime duration = CMTimeMake(val, surroundComposition.duration.timescale);
+                exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
+                
+                dispatch_semaphore_t surroundSemaphore = dispatch_semaphore_create(0);
+                semaphores[0] = surroundSemaphore;
+                
+                [exportSession exportAsynchronouslyWithCompletionHandler:^{
+                    switch ([exportSession status])
+                    {
+                        case AVAssetExportSessionStatusFailed:
+                        {
+                            NSLog(@"Failed");
+                            NSLog(@"%@", exportSession.error.localizedDescription);
+                            NSLog(@"%@", exportSession.error.localizedFailureReason);
+                            break;
+                        }
+                        case AVAssetExportSessionStatusCompleted:
+                        {
+                            NSLog(@"Surround Completed");
+                            dispatch_semaphore_signal(surroundSemaphore);
+                        }
+                        default:
+                            break;
+                    }
+                }];
+                
+                dispatch_semaphore_wait(surroundSemaphore, DISPATCH_TIME_FOREVER);
+            }
+            else
+            {
+                NSLog(@"Surround file exists... skipping");
             }
             
-            //create stereo comp and export
-            AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:surroundComposition presetName:AVAssetExportPresetPassthrough];
-            
-            exportSession.outputFileType = AVFileTypeQuickTimeMovie;
-            exportSession.outputURL = surroundExportfile;
-            exportSession.shouldOptimizeForNetworkUse = false;
-            
-            CMTimeValue val = surroundComposition.duration.value;
-            CMTime duration = CMTimeMake(val, surroundComposition.duration.timescale);
-            exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
-            
-            dispatch_semaphore_t surroundSemaphore = dispatch_semaphore_create(0);
-            semaphores[0] = surroundSemaphore;
-            
-            [exportSession exportAsynchronouslyWithCompletionHandler:^{
-                switch ([exportSession status])
-                {
-                    case AVAssetExportSessionStatusFailed:
-                    {
-                        NSLog(@"Failed");
-                        NSLog(@"%@", exportSession.error.localizedDescription);
-                        NSLog(@"%@", exportSession.error.localizedFailureReason);
-                        break;
-                    }
-                    case AVAssetExportSessionStatusCompleted:
-                    {
-                        NSLog(@"Surround Completed");
-                        dispatch_semaphore_signal(surroundSemaphore);
-                    }
-                    default:
-                        break;
-                }
-            }];
-            
-            dispatch_semaphore_wait(surroundSemaphore, DISPATCH_TIME_FOREVER);
-
-            
-            //create stero output
-            AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
-            for (int i = 6; i < 8; i++)
+            if (![[NSFileManager defaultManager] fileExistsAtPath:[stereoExportfile path]])
             {
-                AVAssetTrack *currentTrack = tracks[i];
-                AVMutableCompositionTrack *compTrack = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                CMTimeRange timeRange = currentTrack.timeRange;
-                [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
-            }
-            //create stereo comp and export
-            AVAssetExportSession *stereoExportSession = [[AVAssetExportSession alloc] initWithAsset:stereoComposition presetName:AVAssetExportPresetPassthrough];
-            
-            stereoExportSession.outputFileType = AVFileTypeQuickTimeMovie;
-            stereoExportSession.outputURL = stereoExportfile;
-            stereoExportSession.shouldOptimizeForNetworkUse = false;
-            
-            val = stereoComposition.duration.value;
-            duration = CMTimeMake(val, stereoComposition.duration.timescale);
-            stereoExportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
-            
-            dispatch_semaphore_t stereoSemaphore = dispatch_semaphore_create(0);
-            semaphores[1] = stereoSemaphore;
-            
-            
-            [stereoExportSession exportAsynchronouslyWithCompletionHandler:^{
-                switch ([exportSession status])
+                //create stero output
+                AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
+                for (int i = 6; i < trackCount; i++)
                 {
-                    case AVAssetExportSessionStatusFailed:
-                    {
-                        NSLog(@"Failed");
-                        NSLog(@"%@", stereoExportSession.error.localizedDescription);
-                        NSLog(@"%@", stereoExportSession.error.localizedFailureReason);
-                        break;
-                    }
-                    case AVAssetExportSessionStatusCompleted:
-                    {
-                        NSLog(@"Stereo Completed");
-                        dispatch_semaphore_signal(stereoSemaphore);
-                    }
-                    default:
-                        break;
+                    AVAssetTrack *currentTrack = tracks[i];
+                    AVMutableCompositionTrack *compTrack = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+                    CMTimeRange timeRange = currentTrack.timeRange;
+                    [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
                 }
-            }];
-            
-            dispatch_semaphore_wait(stereoSemaphore, DISPATCH_TIME_FOREVER);
-        }
-        else if (tracks.count == 7)
-        {
-            AVMutableComposition *surroundComposition = [[AVMutableComposition alloc] init];
-            //create semaphore array
-            dispatch_semaphore_t semaphores[2];
-            
-            //create 5.1 comp and export
-            for (int i = 0; i < 6; i++)
+                //create stereo comp and export
+                AVAssetExportSession *stereoExportSession = [[AVAssetExportSession alloc] initWithAsset:stereoComposition presetName:AVAssetExportPresetPassthrough];
+                
+                stereoExportSession.outputFileType = AVFileTypeQuickTimeMovie;
+                stereoExportSession.outputURL = stereoExportfile;
+                stereoExportSession.shouldOptimizeForNetworkUse = false;
+                
+                CMTimeValue val = stereoComposition.duration.value;
+                CMTime duration = CMTimeMake(val, stereoComposition.duration.timescale);
+                stereoExportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
+                
+                dispatch_semaphore_t stereoSemaphore = dispatch_semaphore_create(0);
+                semaphores[1] = stereoSemaphore;
+                
+                
+                [stereoExportSession exportAsynchronouslyWithCompletionHandler:^{
+                    switch ([stereoExportSession status])
+                    {
+                        case AVAssetExportSessionStatusFailed:
+                        {
+                            NSLog(@"Failed");
+                            NSLog(@"%@", stereoExportSession.error.localizedDescription);
+                            NSLog(@"%@", stereoExportSession.error.localizedFailureReason);
+                            break;
+                        }
+                        case AVAssetExportSessionStatusCompleted:
+                        {
+                            NSLog(@"Stereo Completed");
+                            dispatch_semaphore_signal(stereoSemaphore);
+                        }
+                        default:
+                            break;
+                    }
+                }];
+                dispatch_semaphore_wait(stereoSemaphore, DISPATCH_TIME_FOREVER);
+            }   
+            else
             {
-                AVAssetTrack *currentTrack = tracks[i];
-                AVMutableCompositionTrack *compTrack = [surroundComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                CMTimeRange timeRange = currentTrack.timeRange;
-                [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
+                NSLog(@"Stereo file exists... skipping");
             }
-            
-            //create stereo comp and export
-            AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:surroundComposition presetName:AVAssetExportPresetPassthrough];
-            
-            exportSession.outputFileType = AVFileTypeQuickTimeMovie;
-            exportSession.outputURL = surroundExportfile;
-            exportSession.shouldOptimizeForNetworkUse = false;
-            
-            CMTimeValue val = surroundComposition.duration.value;
-            CMTime duration = CMTimeMake(val, surroundComposition.duration.timescale);
-            exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
-            
-            dispatch_semaphore_t surroundSemaphore = dispatch_semaphore_create(0);
-            semaphores[0] = surroundSemaphore;
-            
-            [exportSession exportAsynchronouslyWithCompletionHandler:^{
-                switch ([exportSession status])
-                {
-                    case AVAssetExportSessionStatusFailed:
-                    {
-                        NSLog(@"Failed");
-                        NSLog(@"%@", exportSession.error.localizedDescription);
-                        NSLog(@"%@", exportSession.error.localizedFailureReason);
-                        break;
-                    }
-                    case AVAssetExportSessionStatusCompleted:
-                    {
-                        NSLog(@"Surround Completed");
-                        dispatch_semaphore_signal(surroundSemaphore);
-                    }
-                    default:
-                        break;
-                }
-            }];
-            
-            dispatch_semaphore_wait(surroundSemaphore, DISPATCH_TIME_FOREVER);
-            
-            
-            //create stero output from matrix stereo track
-            AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
-            AVAssetTrack *currentTrack = tracks[7];
-            AVMutableCompositionTrack *compTrack = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-            CMTimeRange timeRange = currentTrack.timeRange;
-            [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
-
-            //create stereo comp and export
-            AVAssetExportSession *stereoExportSession = [[AVAssetExportSession alloc] initWithAsset:stereoComposition presetName:AVAssetExportPresetPassthrough];
-            
-            stereoExportSession.outputFileType = AVFileTypeQuickTimeMovie;
-            stereoExportSession.outputURL = stereoExportfile;
-            stereoExportSession.shouldOptimizeForNetworkUse = false;
-            
-            val = stereoComposition.duration.value;
-            duration = CMTimeMake(val, stereoComposition.duration.timescale);
-            stereoExportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
-            
-            dispatch_semaphore_t stereoSemaphore = dispatch_semaphore_create(0);
-            semaphores[1] = stereoSemaphore;
-            
-            
-            [stereoExportSession exportAsynchronouslyWithCompletionHandler:^{
-                switch ([exportSession status])
-                {
-                    case AVAssetExportSessionStatusFailed:
-                    {
-                        NSLog(@"Failed");
-                        NSLog(@"%@", stereoExportSession.error.localizedDescription);
-                        NSLog(@"%@", stereoExportSession.error.localizedFailureReason);
-                        break;
-                    }
-                    case AVAssetExportSessionStatusCompleted:
-                    {
-                        NSLog(@"Stereo Completed");
-                        dispatch_semaphore_signal(stereoSemaphore);
-                    }
-                    default:
-                        break;
-                }
-            }];
-            
-            dispatch_semaphore_wait(stereoSemaphore, DISPATCH_TIME_FOREVER);
-
         }
-        else if (tracks.count == 2 || tracks.count == 6)
+        else if (trackCount == 2 || trackCount == 6)
         {
-            if (tracks.count == 2)
+            if (trackCount == 2)
             {
                 NSLog(@"MOV is already a stereo file. Skipping");
                 if ([[NSFileManager defaultManager] isReadableFileAtPath:incomingFilepath])
                 {
-                    [[NSFileManager defaultManager] moveItemAtPath:incomingFilepath toPath:[destinationFullPathFilename stringByAppendingPathExtension:@"_STEREO.mov"] error:nil];
+                    [[NSFileManager defaultManager] moveItemAtPath:incomingFilepath toPath:[destinationFullPathFilename stringByAppendingString:@"_STEREO.mov"] error:nil];
                 }
-
+                
             }
             
-            if (tracks.count == 6)
+            if (trackCount == 6)
             {
                 NSLog(@"MOV has six tracks. No demuxing required");
                 if ([[NSFileManager defaultManager] isReadableFileAtPath:incomingFilepath])
                 {
-                    [[NSFileManager defaultManager] moveItemAtPath:incomingFilepath toPath:[destinationFullPathFilename stringByAppendingPathExtension:@"_SURROUND.mov"] error:nil];
+                    [[NSFileManager defaultManager] moveItemAtPath:incomingFilepath toPath:[destinationFullPathFilename stringByAppendingString:@"_SURROUND.mov"] error:nil];
                 }
             }
             
