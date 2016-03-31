@@ -63,7 +63,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "/Volumes/encoding/02-mastering/NBC-Universal/0001-TEMPORARY_WORK_FILES/AdderallDiariesThe_ITJ_2443030_For_ENC1_20160323/AdderallDiariesThe_DA000709015_08M21_FTR_Theatrical_2398_16x9LB_240_CSP_HD_ProResHQ_220M.mov"
+            argument = "/Users/akaramian/Desktop/PMT_OUTPUT.mov"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
