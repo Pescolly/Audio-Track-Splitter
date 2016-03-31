@@ -13,6 +13,7 @@ int main(int argc, const char * argv[])
 {
     @autoreleasepool
     {
+		NSLog(@"Audio Stem Creation Starting Now");
         //fetch args
         NSArray *args = [[NSProcessInfo processInfo] arguments];
         if ([args count] < 2)
@@ -32,7 +33,7 @@ int main(int argc, const char * argv[])
         AVURLAsset *sourceFile = [[AVURLAsset alloc] initWithURL:incomingURL options:nil];
         NSArray<AVAssetTrack *> *tracks = [sourceFile tracksWithMediaType:AVMediaTypeAudio];
 		
-		NSArray<NSString *> *STEM_LABELS = @[@"L",@"R",@"C",@"LFE",@"LS",@"RS",@"LT",@"RT",@"LMnE",@"RMnE"];
+		NSArray<NSString *> *STEM_LABELS = @[@"_L",@"_R",@"_C",@"_LFE",@"_LS",@"_RS",@"_LT",@"_RT",@"_LMnE",@"_RMnE"];
 		
 		//setup export URL and create folder if it does not exist
 		NSString *trackExportDestination = [incoming_Directory stringByAppendingPathComponent:@"AudioStems"];
@@ -43,63 +44,69 @@ int main(int argc, const char * argv[])
 		}
 
 		NSUInteger trackCount = tracks.count;
-		//create semaphore array
-		dispatch_semaphore_t semaphores[trackCount];
+		dispatch_group_t trackGroup = dispatch_group_create();
+		dispatch_queue_t trackQ = dispatch_queue_create("com.mvf.trackexportq", DISPATCH_QUEUE_CONCURRENT);
 		
 		//create 5.1 comp and export
 		for (int i = 0; i < trackCount; i++)
 		{
-			
-			//get track and setup composition
-			AVAssetTrack *currentTrack = tracks[i];
-			AVMutableComposition *trackComposition = [[AVMutableComposition alloc] init];
-			AVMutableCompositionTrack *compTrack =  [trackComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-			CMTimeRange timeRange = currentTrack.timeRange;
-			[compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
-			
-			
-			//create file xport url
-			NSString *exportFilename = [[trackExportDestination stringByAppendingPathComponent:[incoming_Filename stringByAppendingString:STEM_LABELS[i]]] stringByAppendingPathExtension:@"wav"];
-			NSURL *exportFile = [[NSURL alloc] initFileURLWithPath:exportFilename];
-			
-			//create composition export session
-			AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:trackComposition presetName:AVAssetExportPresetPassthrough];
-                
-			exportSession.outputFileType = AVFileTypeWAVE;
-			exportSession.outputURL = exportFile;
-			exportSession.shouldOptimizeForNetworkUse = false;
-			
-			CMTimeValue val = trackComposition.duration.value;
-			CMTime duration = CMTimeMake(val, trackComposition.duration.timescale);
-			exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
-			
-			dispatch_semaphore_t trackSempahore = dispatch_semaphore_create(0);
-			semaphores[i] = trackSempahore;
-			
-			//export and signal semaphore
-			[exportSession exportAsynchronouslyWithCompletionHandler:^{
-				switch ([exportSession status])
+			//assign each track to a async thread in the track export dispatch group.
+			dispatch_group_async(trackGroup, trackQ, ^{
+				//get track and setup composition
+				AVAssetTrack *currentTrack = tracks[i];
+				AVMutableComposition *trackComposition = [[AVMutableComposition alloc] init];
+				AVMutableCompositionTrack *compTrack =  [trackComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+				CMTimeRange timeRange = currentTrack.timeRange;
+				[compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
+				
+				
+				//create file xport url
+				NSString *exportFilename = [[trackExportDestination stringByAppendingPathComponent:[incoming_Filename stringByAppendingString:STEM_LABELS[i]]] stringByAppendingPathExtension:@"wav"];
+				NSURL *exportFile = [[NSURL alloc] initFileURLWithPath:exportFilename];
+				if([fileManager fileExistsAtPath:exportFilename])
 				{
-					case AVAssetExportSessionStatusFailed:
-					{
-						NSLog(@"Failed");
-						NSLog(@"%@", exportSession.error.localizedDescription);
-						NSLog(@"%@", exportSession.error.localizedFailureReason);
-						break;
-					}
-					case AVAssetExportSessionStatusCompleted:
-					{
-						NSLog(@"Track %@ Completed", STEM_LABELS[i]);
-						dispatch_semaphore_signal(trackSempahore);
-					}
-					default:
-						break;
+					NSLog(@"File %@ already exists", exportFilename);
+					exit(1);
 				}
-			}];
-			
-			dispatch_semaphore_wait(trackSempahore, DISPATCH_TIME_FOREVER);
+				
+				//create composition export session
+				AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:trackComposition presetName:AVAssetExportPresetPassthrough];
+				
+				exportSession.outputFileType = AVFileTypeWAVE;
+				exportSession.outputURL = exportFile;
+				exportSession.shouldOptimizeForNetworkUse = false;
+				
+				CMTimeValue val = trackComposition.duration.value;
+				CMTime duration = CMTimeMake(val, trackComposition.duration.timescale);
+				exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, duration);
+				
+				NSLog(@"Exporting to %@", exportFile);
+				//export and signal semaphore when async export is complete on this thread
+				dispatch_semaphore_t exportDone = dispatch_semaphore_create(0);
+				[exportSession exportAsynchronouslyWithCompletionHandler:^{
+					switch ([exportSession status])
+					{
+						case AVAssetExportSessionStatusFailed:
+						{
+							NSLog(@"Failed");
+							NSLog(@"%@", exportSession.error.localizedDescription);
+							NSLog(@"%@", exportSession.error.localizedFailureReason);
+							break;
+						}
+						case AVAssetExportSessionStatusCompleted:
+						{
+							NSLog(@"Track %@ Completed", STEM_LABELS[i]);
+							dispatch_semaphore_signal(exportDone);
+						}
+						default:
+							break;
+					}
+				}];
+				dispatch_semaphore_wait(exportDone, DISPATCH_TIME_FOREVER);
+			});
 		}
-        
-    }
-    return 0;
+		dispatch_group_wait(trackGroup, DISPATCH_TIME_FOREVER);
+	}
+	NSLog(@"Done");
+	return 0;
 }
