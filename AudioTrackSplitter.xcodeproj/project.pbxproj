@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DE97F1161CADD2270097E768 /* SDAVAssetExportSession.m in Sources */ = {isa = PBXBuildFile; fileRef = DE97F1151CADD2270097E768 /* SDAVAssetExportSession.m */; };
 		DEC6C9ED1C5AA1E1007A5A31 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = DEC6C9EC1C5AA1E1007A5A31 /* main.m */; };
 /* End PBXBuildFile section */
 
@@ -23,6 +24,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DE97F1141CADD2270097E768 /* SDAVAssetExportSession.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SDAVAssetExportSession.h; sourceTree = "<group>"; };
+		DE97F1151CADD2270097E768 /* SDAVAssetExportSession.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SDAVAssetExportSession.m; sourceTree = "<group>"; };
 		DEC6C9E91C5AA1E1007A5A31 /* AudioTrackDEMUXER */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AudioTrackDEMUXER; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEC6C9EC1C5AA1E1007A5A31 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -57,6 +60,8 @@
 		DEC6C9EB1C5AA1E1007A5A31 /* AudioTrackSplitter */ = {
 			isa = PBXGroup;
 			children = (
+				DE97F1141CADD2270097E768 /* SDAVAssetExportSession.h */,
+				DE97F1151CADD2270097E768 /* SDAVAssetExportSession.m */,
 				DEC6C9EC1C5AA1E1007A5A31 /* main.m */,
 			);
 			path = AudioTrackSplitter;
@@ -119,6 +124,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEC6C9ED1C5AA1E1007A5A31 /* main.m in Sources */,
+				DE97F1161CADD2270097E768 /* SDAVAssetExportSession.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -214,6 +220,7 @@
 		DEC6C9F21C5AA1E1007A5A31 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_OPTIMIZATION_LEVEL = 3;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

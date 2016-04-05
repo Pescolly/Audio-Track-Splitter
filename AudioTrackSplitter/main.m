@@ -8,6 +8,7 @@
 
 #import <Foundation/Foundation.h>
 @import AVFoundation;
+#import "SDAVAssetExportSession.h"
 
 int main(int argc, const char * argv[])
 {
@@ -44,6 +45,8 @@ int main(int argc, const char * argv[])
 		}
 		
 		NSUInteger trackCount = tracks.count;
+		
+		//dispatch group for track export threads
 		dispatch_group_t trackGroup = dispatch_group_create();
 		dispatch_queue_t trackQ = dispatch_queue_create("com.mvf.trackexportq", DISPATCH_QUEUE_CONCURRENT);
 		
@@ -113,13 +116,16 @@ int main(int argc, const char * argv[])
 				{
 					//get stereo pair track
 					AVAssetTrack *matchingTrack = tracks[i+1];
-					CMTimeRange matchingTrackTimeRange = matchingTrack.timeRange;
 					
 					//create stereo comp
 					AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
-					AVMutableCompositionTrack *stereoTrackComp = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-					[stereoTrackComp insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
-					[stereoTrackComp insertTimeRange:matchingTrackTimeRange ofTrack:matchingTrack atTime:kCMTimeZero error:nil];
+					AVMutableCompositionTrack *channel1Track = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+					AVMutableCompositionTrack *channel2Track = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+					
+					//insert time ranges from tracks into comp
+					NSError *err;
+					[channel1Track insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:&err];
+					[channel2Track insertTimeRange:timeRange ofTrack:matchingTrack atTime:kCMTimeZero error:&err];
 					
 					//create file xport url
 					NSString *stereoPairExportName = [STEM_LABELS[i] stringByAppendingString:STEM_LABELS[i+1]];
@@ -132,8 +138,18 @@ int main(int argc, const char * argv[])
 					}
 					
 					//create export session
-					AVAssetExportSession *stereoExportSession = [[AVAssetExportSession alloc] initWithAsset:stereoComposition presetName:AVAssetExportPresetPassthrough];
+					SDAVAssetExportSession *stereoExportSession = [[SDAVAssetExportSession alloc] initWithAsset:stereoComposition];
 					stereoExportSession.outputFileType = AVFileTypeWAVE;
+					stereoExportSession.audioSettings = @
+					{
+						AVFormatIDKey: @(kAudioFormatLinearPCM),
+						AVNumberOfChannelsKey: @2,
+						AVSampleRateKey: @48000,
+						AVLinearPCMIsBigEndianKey: @false,
+						AVLinearPCMBitDepthKey : @24,
+						AVLinearPCMIsFloatKey : @false,
+						AVLinearPCMIsNonInterleaved : @false
+					};
 					stereoExportSession.outputURL = stereoExportFile;
 					stereoExportSession.shouldOptimizeForNetworkUse = false;
 					CMTimeValue val = stereoComposition.duration.value;
