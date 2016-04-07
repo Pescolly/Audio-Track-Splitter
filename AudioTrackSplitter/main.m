@@ -103,16 +103,25 @@ int main(int argc, const char * argv[])
             
             if (![[NSFileManager defaultManager] fileExistsAtPath:[stereoExportfile path]])
             {
-                //create stero output
-                AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
-                for (int i = 6; i < trackCount; i++)
-                {
-                    AVAssetTrack *currentTrack = tracks[i];
-                    AVMutableCompositionTrack *compTrack = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                    CMTimeRange timeRange = currentTrack.timeRange;
-                    [compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
-                }
-                //create stereo comp and export
+				if (trackCount == 8)
+				{
+					//create stero output
+					AVMutableComposition *stereoComposition = [[AVMutableComposition alloc] init];
+					for (int i = 6; i < trackCount; i++)
+					{
+						AVAssetTrack *currentTrack = tracks[i];
+						AVMutableCompositionTrack *compTrack = [stereoComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+						CMTimeRange timeRange = currentTrack.timeRange;
+						[compTrack insertTimeRange:timeRange ofTrack:currentTrack atTime:kCMTimeZero error:nil];
+					}
+					
+				}
+				else (trackCount == 7)
+				{
+					
+				}
+				
+				//create stereo comp and export
                 AVAssetExportSession *stereoExportSession = [[AVAssetExportSession alloc] initWithAsset:stereoComposition presetName:AVAssetExportPresetPassthrough];
                 
                 stereoExportSession.outputFileType = AVFileTypeQuickTimeMovie;
